@@ -1,0 +1,247 @@
+<!-- 1. Include action buttons play/stop -->
+<video id="preview" autoplay controls></video>
+<!-- Add this element to your HTML -->
+<div id="timer"></div>
+<div id="transcript" style="display: none;"></div>
+<a href="javascript:void(0)" class="ndBtn" id="startRecord">Start Recording</a>
+<a href="javascript:void(0)" class="ndBtn" id="pauseRecord">Pause Recording</a>
+<a href="javascript:void(0)" class="ndBtn" id="resumeRecord">Resume Recording</a>
+<a href="javascript:void(0)" class="ndBtn" id="stopRecord" disabled>Stop Recording</a>
+<a href="javascript:void(0)" class="ndBtn" id="saveRecord" disabled>Save Recording</a>
+<a href="javascript:void(0)" class="ndBtn" id="previewRecord" disabled>Preview Recording</a>
+<a href="javascript:void(0)" class="ndBtn" id="downloadTranscript" disabled>Download Transcript</a>
+
+<!-- 2. Include a video element that will display the current video stream and show the recorded video at the end -->
+<hr>
+<!-- 3. Include the RecordRTC library and the latest adapter -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.js"></script>
+<script src="https://cdn.webrtc-experiment.com/RecordRTC.js"></script>
+
+<script type="text/javascript">
+  var previewElement = document.getElementById('preview');
+  var startButton = document.getElementById('startRecord');
+  var pauseButton = document.getElementById('pauseRecord');
+  var resumeButton = document.getElementById('resumeRecord');
+  var stopButton = document.getElementById('stopRecord');
+  var saveButton = document.getElementById('saveRecord');
+  var previewButton = document.getElementById('previewRecord');
+  var transcriptElement = document.getElementById('transcript');
+  var downloadTranscriptButton = document.getElementById('downloadTranscript');
+  var recorder;
+  var recognition;
+  var isRecording = false;
+  // Add this line to your JavaScript code to get the timer element
+  var timerElement = document.getElementById('timer');
+  var startTime; // Variable to store the start time of recording
+  //var startTime; // Variable to store the start time of recording
+  var elapsedTime = 0; // Variable to store the elapsed time
+  var timerInterval; // Declare timerInterval in the outer scope
+  var isPaused = false; // Variable to track whether the recording is paused
+  var pauseTimestamp = 0; // Variable to store the timestamp when recording was paused
+
+  startButton.addEventListener('click', function () {
+    if (!isRecording) {
+        navigator.mediaDevices.enumerateDevices()
+            .then(function(devices) {
+                var cam = devices.find(function(device) {
+                    return device.kind === "videoinput";
+                });
+                var mic = devices.find(function(device) {
+                    return device.kind === "audioinput";
+                });
+
+                var constraints = { video: cam && { deviceId: cam.deviceId }, audio: mic && { deviceId: mic.deviceId } };
+                console.log("getUserMedia start mediaConstraints=" + JSON.stringify(constraints));
+                
+                return navigator.mediaDevices.getUserMedia(constraints);
+            })
+            .then(function(stream) {
+                isRecording = true;
+                previewElement.srcObject = stream;
+                recorder = RecordRTC(stream, {
+                    type: 'video',
+                    mimeType: 'video/webm',
+                    video: {
+                        width: 640,
+                        height: 480,
+                    },
+                    audio: true,
+                });
+                recorder.startRecording();
+                startButton.disabled = true;
+                stopButton.disabled = false;
+                saveButton.disabled = true;
+                previewButton.disabled = true;
+                downloadTranscriptButton.disabled = true;
+
+                // Start the timer
+                //startTime = Date.now();
+                if (isPaused) {
+                    // If recording is paused, adjust the start time by subtracting the paused duration
+                    startTime += Date.now() - pauseTimestamp;
+                    isPaused = false;
+                    startButton.textContent = "Pause Recording"; // Change the button text to indicate pausing
+                } else {
+                    // If not paused, start recording from the beginning
+                    startTime = Date.now();
+                }
+                timerInterval = setInterval(function () {
+                    var elapsedTime = Date.now() - startTime;
+                    var minutes = Math.floor(elapsedTime / 60000);
+                    var seconds = Math.floor((elapsedTime % 60000) / 1000);
+                    // Update the timer element with the elapsed time
+                    timerElement.textContent = `Recording Time: ${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
+                }, 1000); // Update the timer every 1 second (1000 milliseconds)
+
+                // Initialize the speech recognition
+                recognition = new webkitSpeechRecognition();
+                recognition.continuous = true;
+                recognition.interimResults = true;
+                recognition.onresult = function (event) {
+                    const interimTranscript = event.results[0][0].transcript;
+                    transcriptElement.innerText = interimTranscript;
+                    transcriptElement.style.display = 'block';
+                };
+
+                recognition.onend = function () {
+                    downloadTranscriptButton.disabled = false;
+                };
+
+                recognition.start();
+            })
+            .catch(function (error) {
+                console.error('getUserMedia error: ', error);
+            });
+    }
+});
+
+
+  /*startButton.addEventListener('click', function () {
+    if (!isRecording) {
+    navigator.mediaDevices
+        .getUserMedia({ audio: false, video: true })
+        .then(function (stream) {
+          isRecording = true;
+          previewElement.srcObject = stream;
+          recorder = RecordRTC(stream, {
+            type: 'video',
+            mimeType: 'video/webm',
+            video: {
+              width: 640,
+              height: 480,
+            },
+            audio: true,
+          });
+          recorder.startRecording();
+          startButton.disabled = true;
+          stopButton.disabled = false;
+          saveButton.disabled = true;
+          previewButton.disabled = true;
+          downloadTranscriptButton.disabled = true;
+
+          // Initialize the speech recognition
+          recognition = new webkitSpeechRecognition();
+          recognition.continuous = true;
+          recognition.interimResults = true;
+          recognition.onresult = function (event) {
+            const interimTranscript = event.results[0][0].transcript;
+            transcriptElement.innerText = interimTranscript;
+            transcriptElement.style.display = 'block';
+          };
+
+          recognition.onend = function () {
+            downloadTranscriptButton.disabled = false;
+          };
+
+          recognition.start();
+       /})
+        .catch(function (error) {
+          console.error('getUserMedia error: ', error);
+        });
+    }
+  });*/
+
+  pauseButton.addEventListener('click', function () {
+    if (isRecording && !isPaused) {
+        // Pause the recording and store the pause timestamp
+        isPaused = true;
+        pauseTimestamp = Date.now();
+        clearInterval(timerInterval); // Pause the timer by clearing the interval
+        startButton.textContent = "Resume Recording"; // Change the start button text to indicate resuming
+    }
+});
+
+resumeButton.addEventListener('click', function () {
+    if (isRecording && isPaused) {
+        // Resume the recording by adjusting the start time and the pause timestamp
+        startTime += Date.now() - pauseTimestamp;
+        pauseTimestamp = 0; // Reset the pause timestamp
+        isPaused = false;
+        timerInterval = setInterval(function () {
+            // ... (timer update logic remains unchanged)
+            var elapsedTime = Date.now() - startTime;
+                    var minutes = Math.floor(elapsedTime / 60000);
+                    var seconds = Math.floor((elapsedTime % 60000) / 1000);
+                    // Update the timer element with the elapsed time
+                    timerElement.textContent = `Recording Time: ${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
+        }, 1000);
+        startButton.textContent = "Pause Recording"; // Change the start button text to indicate pausing
+    }
+});
+
+
+
+  stopButton.addEventListener('click', function () {
+    if (isRecording) {
+      isRecording = false;
+      recorder.stopRecording(function () {
+          previewElement.srcObject = null;
+          startButton.disabled = false;
+          stopButton.disabled = true;
+          saveButton.disabled = false;
+          previewButton.disabled = false;
+          downloadTranscriptButton.disabled = false;
+          recognition.stop(); // Stop speech recognition
+          // Pause the timer by clearing the interval
+          clearInterval(timerInterval);
+      });
+    }
+  });
+
+  // Add a click event listener to the preview button
+  previewButton.addEventListener('click', function () {
+    if (!isRecording) {
+      var blob = recorder.getBlob();
+      var url = URL.createObjectURL(blob);
+      previewElement.src = url;
+      previewElement.play();
+    }
+  });
+
+  // Save the recorded video
+  saveButton.addEventListener('click', function () {
+    if (!isRecording) {
+      recorder.save('recorded-video.webm');
+    }
+  });
+
+  // Download transcript as a text file
+  downloadTranscriptButton.addEventListener('click', function () {
+    var transcriptText = transcriptElement.innerText;
+    var blob = new Blob([transcriptText], { type: 'text/plain' });
+    var url = window.URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.style.display = 'none';
+    a.href = url;
+    a.download = 'transcript.txt';
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+  });
+</script>
+<style>
+  video {
+    width: 420px;
+    height: 420px;
+  }
+</style>
